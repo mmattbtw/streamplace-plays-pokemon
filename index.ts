@@ -109,7 +109,7 @@ const identityCache = new Map<
   { identity: ResolvedIdentity; expiresAt: number }
 >();
 const pendingIdentityLookups = new Map<string, Promise<ResolvedIdentity | null>>();
-const chatterActivity: Array<{ did: string; createdAt: number }> = [];
+const commandActivity: Array<{ did: string; createdAt: number }> = [];
 let activeCommandId: string | null = null;
 let processingQueue = false;
 
@@ -197,17 +197,17 @@ function parseCommand(raw: string, options?: { allowCommandSpam?: boolean }): Pa
 function countUniqueChattersInWindow(now: number): number {
   const cutoff = now - CHATTER_WINDOW_MS;
   while (true) {
-    const first = chatterActivity[0];
+    const first = commandActivity[0];
     if (!first || first.createdAt >= cutoff) {
       break;
     }
-    chatterActivity.shift();
+    commandActivity.shift();
   }
-  return new Set(chatterActivity.map((entry) => entry.did)).size;
+  return new Set(commandActivity.map((entry) => entry.did)).size;
 }
 
 function recordChatterAndCountUnique(did: string, now: number): number {
-  chatterActivity.push({ did, createdAt: now });
+  commandActivity.push({ did, createdAt: now });
   return countUniqueChattersInWindow(now);
 }
 
@@ -786,8 +786,9 @@ for await (const event of subscription) {
   }
 
   const now = Date.now();
-  const uniqueChatters = recordChatterAndCountUnique(event.did, now);
-  const allowCommandSpam = uniqueChatters < MIN_UNIQUE_CHATTERS_FOR_NO_SPAM;
+  const uniqueCommandChatters = countUniqueChattersInWindow(now);
+  const allowCommandSpam =
+    uniqueCommandChatters < MIN_UNIQUE_CHATTERS_FOR_NO_SPAM;
   const parsedCommand = parseCommand(text, { allowCommandSpam });
   const isCommand = parsedCommand !== null;
   const user = readUser(record, event.did);
@@ -803,6 +804,7 @@ for await (const event of subscription) {
     continue;
   }
 
+  recordChatterAndCountUnique(event.did, now);
   console.log(`accepted "${parsedCommand.normalized}" from ${user}`);
   enqueueCommand(parsedCommand, event.did);
 }
