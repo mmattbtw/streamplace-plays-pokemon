@@ -1,8 +1,5 @@
 import { JetstreamSubscription } from "@atcute/jetstream";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
+import { createConnection } from "node:net";
 
 const STREAMER_DID =
   process.env.STREAMER_DID ?? "did:plc:b6dcapsekrslqcsjavnafgag";
@@ -12,6 +9,16 @@ const KEYPRESS_DURATION_MS = Number.parseInt(
   process.env.KEYPRESS_DURATION_MS ?? "80",
   10,
 );
+const LONG_KEYPRESS_DURATION_MS = Number.parseInt(
+  process.env.LONG_KEYPRESS_DURATION_MS ?? `${KEYPRESS_DURATION_MS * 3}`,
+  10,
+);
+const MGBA_HOST = process.env.MGBA_HOST ?? "127.0.0.1";
+const MGBA_PORT = Number.parseInt(process.env.MGBA_PORT ?? "8765", 10);
+const MGBA_SOCKET_TIMEOUT_MS = Number.parseInt(
+  process.env.MGBA_SOCKET_TIMEOUT_MS ?? "1500",
+  10,
+);
 const DRY_RUN = process.env.DRY_RUN === "1";
 const OVERLAY_PORT = Number.parseInt(process.env.OVERLAY_PORT ?? "8080", 10);
 const SLINGSHOT_URL =
@@ -19,11 +26,17 @@ const SLINGSHOT_URL =
 const MAX_CHAT_MESSAGES = 35;
 const MAX_QUEUE_ITEMS = 40;
 const IDENTITY_CACHE_TTL_MS = 15 * 60 * 1000;
-
-type KeySpec =
-  | { type: "char"; value: string }
-  | { type: "macCode"; value: number }
-  | { type: "linuxKey"; value: string };
+const CHATTER_WINDOW_MS = 10 * 60 * 1000;
+const MIN_UNIQUE_CHATTERS_FOR_NO_SPAM = 3;
+const MAX_COMMAND_SPAM_REPEAT = 100;
+const QUEUE_COMMAND_DELAY_MS = Number.parseInt(
+  process.env.QUEUE_COMMAND_DELAY_MS ?? "80",
+  10,
+);
+const SPAM_REPEAT_DELAY_MS = Number.parseInt(
+  process.env.SPAM_REPEAT_DELAY_MS ?? "140",
+  10,
+);
 
 type QueueStatus = "queued" | "active" | "done" | "error";
 
@@ -53,6 +66,12 @@ interface OverlaySnapshot {
   chat: ChatMessage[];
   queue: QueueItem[];
   activeCommandId: string | null;
+  spamAbility: {
+    enabled: boolean;
+    uniqueChatters: number;
+    threshold: number;
+    windowMinutes: number;
+  };
 }
 
 interface ResolvedIdentity {
@@ -62,38 +81,24 @@ interface ResolvedIdentity {
   avatarUrl?: string;
 }
 
-const COMMAND_TO_KEY = new Map<string, KeySpec>([
-  ["up", { type: "char", value: "i" }],
-  ["down", { type: "char", value: "k" }],
-  ["left", { type: "char", value: "j" }],
-  ["right", { type: "char", value: "l" }],
-  ["a", { type: "char", value: "a" }],
-  ["b", { type: "char", value: "b" }],
-  ["start", { type: "char", value: "o" }],
-  ["select", { type: "char", value: "p" }],
-  ["l", { type: "char", value: "l" }],
-  ["r", { type: "char", value: "r" }],
-]);
+interface ParsedCommand {
+  buttons: string[];
+  durationMs: number;
+  normalized: string;
+  repeatCount: number;
+}
 
-const CHAR_TO_LINUX_KEY = new Map<string, string>([
-  ["a", "a"],
-  ["b", "b"],
-  ["i", "i"],
-  ["j", "j"],
-  ["k", "k"],
-  ["l", "l"],
-  ["o", "o"],
-  ["p", "p"],
-  ["r", "r"],
-]);
-
-const MAC_CODE_TO_LINUX_KEY = new Map<number, string>([
-  [126, "Up"],
-  [125, "Down"],
-  [123, "Left"],
-  [124, "Right"],
-  [36, "Return"],
-  [51, "BackSpace"],
+const SUPPORTED_COMMANDS = new Set([
+  "up",
+  "down",
+  "left",
+  "right",
+  "a",
+  "b",
+  "start",
+  "select",
+  "l",
+  "r",
 ]);
 
 const overlayClients = new Set<ReadableStreamDefaultController<string>>();
@@ -104,6 +109,7 @@ const identityCache = new Map<
   { identity: ResolvedIdentity; expiresAt: number }
 >();
 const pendingIdentityLookups = new Map<string, Promise<ResolvedIdentity | null>>();
+const chatterActivity: Array<{ did: string; createdAt: number }> = [];
 let activeCommandId: string | null = null;
 let processingQueue = false;
 
@@ -113,6 +119,96 @@ function sleep(ms: number): Promise<void> {
 
 function normalizeCommand(raw: string): string {
   return raw.trim().toLowerCase();
+}
+
+function parseCommand(raw: string, options?: { allowCommandSpam?: boolean }): ParsedCommand | null {
+  const normalizedRaw = normalizeCommand(raw);
+  if (normalizedRaw.length === 0) {
+    return null;
+  }
+
+  const spamMatch = normalizedRaw.match(/^(.+?)\s+x(\d+)$/);
+  if (spamMatch) {
+    if (!options?.allowCommandSpam) {
+      return null;
+    }
+
+    const commandRaw = spamMatch[1];
+    if (commandRaw === undefined) {
+      return null;
+    }
+
+    const repeatRaw = spamMatch[2];
+    if (repeatRaw === undefined) {
+      return null;
+    }
+    const repeatCount = Number.parseInt(repeatRaw, 10);
+    if (
+      !Number.isInteger(repeatCount) ||
+      repeatCount < 2 ||
+      repeatCount > MAX_COMMAND_SPAM_REPEAT
+    ) {
+      return null;
+    }
+
+    const baseCommand = parseCommand(commandRaw, { allowCommandSpam: false });
+    if (!baseCommand) {
+      return null;
+    }
+
+    return {
+      buttons: baseCommand.buttons,
+      durationMs: baseCommand.durationMs,
+      normalized: baseCommand.normalized,
+      repeatCount,
+    };
+  }
+
+  const isExtendedHold = normalizedRaw.endsWith("-");
+  const base = isExtendedHold
+    ? normalizedRaw.slice(0, -1).trim()
+    : normalizedRaw;
+  if (base.length === 0) {
+    return null;
+  }
+
+  const buttons = base.split("+").map((part) => part.trim());
+  if (buttons.length === 0 || buttons.length > 2) {
+    return null;
+  }
+
+  for (const button of buttons) {
+    if (button.length === 0 || !SUPPORTED_COMMANDS.has(button)) {
+      return null;
+    }
+  }
+
+  const durationMs = isExtendedHold
+    ? LONG_KEYPRESS_DURATION_MS
+    : KEYPRESS_DURATION_MS;
+  return {
+    buttons,
+    durationMs,
+    normalized: `${buttons.join("+")}${isExtendedHold ? "-" : ""}`,
+    repeatCount: 1,
+  };
+}
+
+function countUniqueChattersInWindow(now: number): number {
+  const cutoff = now - CHATTER_WINDOW_MS;
+  while (true) {
+    const first = chatterActivity[0];
+    if (!first || first.createdAt >= cutoff) {
+      break;
+    }
+    chatterActivity.shift();
+  }
+  return new Set(chatterActivity.map((entry) => entry.did)).size;
+}
+
+function recordChatterAndCountUnique(did: string, now: number): number {
+  chatterActivity.push({ did, createdAt: now });
+  return countUniqueChattersInWindow(now);
 }
 
 function readMessageText(record: Record<string, unknown>): string | undefined {
@@ -227,10 +323,17 @@ function cachedIdentityForDid(did: string): ResolvedIdentity | null {
 }
 
 function snapshot(): OverlaySnapshot {
+  const uniqueChatters = countUniqueChattersInWindow(Date.now());
   return {
     chat: chatMessages,
     queue: commandQueue,
     activeCommandId,
+    spamAbility: {
+      enabled: uniqueChatters < MIN_UNIQUE_CHATTERS_FOR_NO_SPAM,
+      uniqueChatters,
+      threshold: MIN_UNIQUE_CHATTERS_FOR_NO_SPAM,
+      windowMinutes: CHATTER_WINDOW_MS / (60 * 1000),
+    },
   };
 }
 
@@ -440,67 +543,77 @@ function trimQueue(): void {
   commandQueue.splice(0, overflow);
 }
 
-async function runMacKeypress(key: KeySpec): Promise<void> {
-  let script: string;
-
-  if (key.type === "macCode") {
-    script = `tell application "System Events" to key down key code ${key.value}
-delay ${KEYPRESS_DURATION_MS / 1000}
-tell application "System Events" to key up key code ${key.value}`;
-  } else if (key.type === "char") {
-    script = `tell application "System Events" to key down "${key.value}"
-delay ${KEYPRESS_DURATION_MS / 1000}
-tell application "System Events" to key up "${key.value}"`;
-  } else {
-    throw new Error(`Unsupported macOS key type: ${key.type}`);
-  }
-
-  await execFileAsync("osascript", ["-e", script]);
-}
-
-async function runLinuxKeypress(key: KeySpec): Promise<void> {
-  const linuxKey =
-    key.type === "linuxKey"
-      ? key.value
-      : key.type === "char"
-        ? CHAR_TO_LINUX_KEY.get(key.value)
-        : MAC_CODE_TO_LINUX_KEY.get(key.value);
-
-  if (!linuxKey) {
-    throw new Error(`No Linux key mapping for ${JSON.stringify(key)}`);
-  }
-
-  await execFileAsync("xdotool", ["key", "--clearmodifiers", linuxKey]);
-}
-
-async function dispatchKeypress(key: KeySpec, command: string): Promise<void> {
+async function dispatchMgbaCommand(buttons: string[], durationMs: number): Promise<void> {
   if (DRY_RUN) {
-    console.log(`[DRY_RUN] ${command} -> ${JSON.stringify(key)}`);
-    await sleep(KEYPRESS_DURATION_MS);
+    console.log(
+      `[DRY_RUN] ${buttons.join("+")} (${durationMs}ms) -> ${MGBA_HOST}:${MGBA_PORT}`,
+    );
+    await sleep(durationMs);
     return;
   }
 
-  if (process.platform === "darwin") {
-    await runMacKeypress(key);
-    return;
-  }
+  await new Promise<void>((resolve, reject) => {
+    const socket = createConnection({ host: MGBA_HOST, port: MGBA_PORT });
+    let settled = false;
 
-  if (process.platform === "linux") {
-    await runLinuxKeypress(key);
-    return;
-  }
+    const fail = (error: Error): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      socket.destroy();
+      reject(error);
+    };
 
-  throw new Error(
-    `Unsupported platform: ${process.platform}. Implement keypress support for this OS.`,
-  );
+    socket.setTimeout(MGBA_SOCKET_TIMEOUT_MS);
+
+    socket.once("timeout", () => {
+      fail(
+        new Error(
+          `Timed out sending command to mGBA bridge at ${MGBA_HOST}:${MGBA_PORT}`,
+        ),
+      );
+    });
+
+    socket.once("error", (error) => {
+      fail(error);
+    });
+
+    socket.once("connect", () => {
+      const payload = buttons.map((button) => `press ${button} ${durationMs}\n`).join("");
+      socket.write(payload, "utf8", (error) => {
+        if (error) {
+          fail(error);
+          return;
+        }
+        socket.end();
+      });
+    });
+
+    socket.once("close", (hadError) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (hadError) {
+        reject(
+          new Error(
+            `Socket closed with error while sending to ${MGBA_HOST}:${MGBA_PORT}`,
+          ),
+        );
+      } else {
+        resolve();
+      }
+    });
+  });
 }
 
-function enqueueCommand(command: string, did: string): void {
+function buildQueueItem(command: string, did: string): QueueItem {
   const cachedIdentity = cachedIdentityForDid(did);
   const user = cachedIdentity
     ? queueLabelForIdentity(cachedIdentity, did)
     : shortenDid(did);
-  const item: QueueItem = {
+  return {
     id: `${Date.now()}-${Math.random().toString(16).slice(2, 9)}`,
     did,
     user,
@@ -510,12 +623,28 @@ function enqueueCommand(command: string, did: string): void {
     status: "queued",
     createdAt: Date.now(),
   };
+}
 
-  commandQueue.push(item);
+function enqueueSingleCommand(command: string, did: string): void {
+  commandQueue.push(buildQueueItem(command, did));
   trimQueue();
   broadcast();
-
   void processQueue();
+}
+
+function enqueueCommand(command: ParsedCommand, did: string): void {
+  enqueueSingleCommand(command.normalized, did);
+
+  if (command.repeatCount <= 1) {
+    return;
+  }
+
+  void (async () => {
+    for (let i = 1; i < command.repeatCount; i += 1) {
+      await sleep(SPAM_REPEAT_DELAY_MS);
+      enqueueSingleCommand(command.normalized, did);
+    }
+  })();
 }
 
 async function processQueue(): Promise<void> {
@@ -533,8 +662,8 @@ async function processQueue(): Promise<void> {
         return;
       }
 
-      const key = COMMAND_TO_KEY.get(next.command);
-      if (!key) {
+      const parsedCommand = parseCommand(next.command);
+      if (!parsedCommand) {
         next.status = "error";
         broadcast();
         continue;
@@ -545,7 +674,7 @@ async function processQueue(): Promise<void> {
       broadcast();
 
       try {
-        await dispatchKeypress(key, next.command);
+        await dispatchMgbaCommand(parsedCommand.buttons, parsedCommand.durationMs);
         next.status = "done";
       } catch (error) {
         next.status = "error";
@@ -554,7 +683,7 @@ async function processQueue(): Promise<void> {
 
       activeCommandId = null;
       broadcast();
-      await sleep(80);
+      await sleep(QUEUE_COMMAND_DELAY_MS);
     }
   } finally {
     processingQueue = false;
@@ -618,19 +747,10 @@ Bun.serve({
 console.log("Starting Stream.Place Plays listener");
 console.log(`Jetstream URL: ${JETSTREAM_URL}`);
 console.log(`Streamer DID filter: ${STREAMER_DID}`);
-console.log(`Keyboard output platform: ${process.platform}`);
+console.log(`mGBA bridge target: ${MGBA_HOST}:${MGBA_PORT}`);
 console.log(`Overlay URL: http://localhost:${OVERLAY_PORT}/overlay`);
 console.log(`Slingshot URL: ${SLINGSHOT_URL}`);
-
-if (process.platform === "darwin") {
-  console.log(
-    "macOS note: give Terminal/Codex Accessibility permissions so osascript can send key events.",
-  );
-}
-
-if (process.platform === "linux") {
-  console.log("Linux note: install xdotool for key event output.");
-}
+console.log(`mGBA socket timeout: ${MGBA_SOCKET_TIMEOUT_MS}ms`);
 
 const subscription = new JetstreamSubscription({
   url: JETSTREAM_URL,
@@ -665,21 +785,24 @@ for await (const event of subscription) {
     continue;
   }
 
-  const command = normalizeCommand(text);
-  const key = COMMAND_TO_KEY.get(command);
+  const now = Date.now();
+  const uniqueChatters = recordChatterAndCountUnique(event.did, now);
+  const allowCommandSpam = uniqueChatters < MIN_UNIQUE_CHATTERS_FOR_NO_SPAM;
+  const parsedCommand = parseCommand(text, { allowCommandSpam });
+  const isCommand = parsedCommand !== null;
   const user = readUser(record, event.did);
 
-  pushChatMessage(event.did, user, text, Boolean(key));
+  pushChatMessage(event.did, user, text, isCommand);
   const localIdentity = localIdentityFromRecord(event.did, record);
   if (localIdentity) {
     cacheLocalIdentity(localIdentity);
   }
   hydrateIdentity(event.did);
 
-  if (!key) {
+  if (!parsedCommand) {
     continue;
   }
 
-  console.log(`accepted "${command}" from ${user}`);
-  enqueueCommand(command, event.did);
+  console.log(`accepted "${parsedCommand.normalized}" from ${user}`);
+  enqueueCommand(parsedCommand, event.did);
 }
