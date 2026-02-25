@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stream Overlay</title>
+    <style>
+      :root {
+        --bg-chat: rgba(8, 12, 18, 0.54);
+        --bg-queue: rgba(4, 8, 14, 0.64);
+        --border: rgba(159, 181, 205, 0.28);
+        --text: #f4f8fc;
+        --muted: #9db2c6;
+        --active: #79ffe1;
+        --queued: #9ad4ff;
+        --done: #7c8ba2;
+        --error: #ff7e7e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: transparent;
+        color: var(--text);
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+      }
+
+      .overlay {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      .chat-panel {
+        position: absolute;
+        top: 2vh;
+        right: 1.2vw;
+        width: min(32vw, 460px);
+        height: 76vh;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 14px;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(121, 255, 225, 0.13), transparent 58%),
+          var(--bg-chat);
+        backdrop-filter: blur(8px);
+      }
+
+      .panel-title {
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0 0 6px;
+      }
+
+      .chat-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        scrollbar-width: none;
+      }
+
+      .chat-list::-webkit-scrollbar {
+        display: none;
+      }
+
+      .chat-item {
+        border: 1px solid rgba(157, 178, 198, 0.26);
+        border-radius: 12px;
+        padding: 9px 11px;
+        background: rgba(10, 17, 28, 0.55);
+        animation: enter 220ms ease-out;
+        display: grid;
+        grid-template-columns: 34px 1fr;
+        gap: 9px;
+      }
+
+      .avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 1px solid rgba(176, 236, 255, 0.45);
+        background: rgba(157, 178, 198, 0.25);
+      }
+
+      .avatar.fallback {
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 700;
+        color: #d9f5ff;
+      }
+
+      .chat-user {
+        font-size: 12px;
+        font-weight: 650;
+        color: #b0ecff;
+      }
+
+      .chat-handle {
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .chat-text {
+        display: block;
+        margin-top: 3px;
+        font-size: 17px;
+        line-height: 1.2;
+        word-break: break-word;
+      }
+
+      .queue-panel {
+        position: absolute;
+        left: 1.2vw;
+        right: 1.2vw;
+        bottom: 2vh;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px 14px 14px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background:
+          linear-gradient(90deg, rgba(122, 165, 255, 0.15), rgba(121, 255, 225, 0.1)),
+          var(--bg-queue);
+        backdrop-filter: blur(9px);
+      }
+
+      .queue-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        gap: 10px;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+
+      .queue-list::-webkit-scrollbar {
+        display: none;
+      }
+
+      .queue-item {
+        min-width: 150px;
+        padding: 9px 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(154, 212, 255, 0.4);
+        background: rgba(9, 15, 24, 0.62);
+        display: grid;
+        gap: 2px;
+        transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+      }
+
+      .queue-head {
+        display: grid;
+        grid-template-columns: 22px 1fr;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .queue-avatar {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 1px solid rgba(176, 236, 255, 0.5);
+        background: rgba(157, 178, 198, 0.3);
+      }
+
+      .queue-avatar.fallback {
+        display: grid;
+        place-items: center;
+        font-size: 10px;
+        font-weight: 700;
+        color: #d9f5ff;
+      }
+
+      .queue-item .cmd {
+        font-size: 20px;
+        line-height: 1;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      .queue-item .user {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .queue-item .handle {
+        color: #b0ecff;
+        font-size: 11px;
+      }
+
+      .queue-item .state {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.11em;
+      }
+
+      .queue-item.queued {
+        border-color: rgba(154, 212, 255, 0.42);
+      }
+
+      .queue-item.queued .state {
+        color: var(--queued);
+      }
+
+      .queue-item.active {
+        border-color: var(--active);
+        box-shadow: 0 0 0 2px rgba(121, 255, 225, 0.26), 0 0 28px rgba(121, 255, 225, 0.28);
+        transform: translateY(-2px) scale(1.03);
+      }
+
+      .queue-item.active .state {
+        color: var(--active);
+      }
+
+      .queue-item.done {
+        opacity: 0.65;
+        border-color: rgba(124, 139, 162, 0.42);
+      }
+
+      .queue-item.done .state {
+        color: var(--done);
+      }
+
+      .queue-item.error {
+        border-color: rgba(255, 126, 126, 0.6);
+      }
+
+      .queue-item.error .state {
+        color: var(--error);
+      }
+
+      .status {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      @keyframes enter {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-width: 900px) {
+        .chat-panel {
+          width: min(56vw, 420px);
+          height: 62vh;
+        }
+
+        .chat-text {
+          font-size: 15px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="overlay">
+      <section class="chat-panel">
+        <h2 class="panel-title">Live Chat</h2>
+        <ul id="chat-list" class="chat-list"></ul>
+      </section>
+
+      <section class="queue-panel">
+        <h2 class="panel-title">Command Queue</h2>
+        <ul id="queue-list" class="queue-list"></ul>
+        <div id="status" class="status">Connecting...</div>
+      </section>
+    </div>
+
+    <script>
+      const chatList = document.getElementById("chat-list");
+      const queueList = document.getElementById("queue-list");
+      const statusEl = document.getElementById("status");
+      const query = new URLSearchParams(window.location.search);
+      const chatMode = query.get("chat") || "non_commands";
+      const chatNodes = new Map();
+      const queueNodes = new Map();
+
+      function initial(text) {
+        const trimmed = (text || "").trim();
+        return trimmed.length > 0 ? trimmed[0].toUpperCase() : "?";
+      }
+
+      function shortDid(did) {
+        if (!did) return "";
+        return did.length <= 18 ? did : `${did.slice(0, 10)}...${did.slice(-5)}`;
+      }
+
+      function stickToEnd(listEl, horizontal = false) {
+        if (horizontal) {
+          listEl.scrollLeft = listEl.scrollWidth;
+          return;
+        }
+        listEl.scrollTop = listEl.scrollHeight;
+      }
+
+      function scheduleStickToEnd(listEl, horizontal = false) {
+        requestAnimationFrame(() => {
+          stickToEnd(listEl, horizontal);
+          setTimeout(() => stickToEnd(listEl, horizontal), 0);
+        });
+      }
+
+      function filterChat(chat) {
+        if (chatMode === "all") {
+          return chat;
+        }
+        if (chatMode === "commands") {
+          return chat.filter((msg) => msg.isCommand);
+        }
+        return chat.filter((msg) => !msg.isCommand);
+      }
+
+      function createAvatarNode(url, label, className, onLoad) {
+        if (url) {
+          const img = document.createElement("img");
+          img.className = className;
+          img.src = url;
+          img.alt = label || "";
+          img.addEventListener("load", onLoad, { once: true });
+          return img;
+        }
+        const fallback = document.createElement("span");
+        fallback.className = `${className} fallback`;
+        fallback.textContent = initial(label);
+        return fallback;
+      }
+
+      function setAvatar(container, url, label, className, onLoad) {
+        if (
+          container.dataset.avatarUrl === (url || "") &&
+          container.dataset.avatarLabel === (label || "")
+        ) {
+          return;
+        }
+
+        container.dataset.avatarUrl = url || "";
+        container.dataset.avatarLabel = label || "";
+        container.replaceChildren(createAvatarNode(url, label, className, onLoad));
+      }
+
+      function createChatNode() {
+        const li = document.createElement("li");
+        li.className = "chat-item";
+
+        const avatarWrap = document.createElement("div");
+        avatarWrap.className = "avatar-slot";
+
+        const body = document.createElement("div");
+        const user = document.createElement("span");
+        user.className = "chat-user";
+        const handle = document.createElement("span");
+        handle.className = "chat-handle";
+        const text = document.createElement("span");
+        text.className = "chat-text";
+
+        body.append(user, handle, text);
+        li.append(avatarWrap, body);
+        li._avatarWrap = avatarWrap;
+        li._user = user;
+        li._handle = handle;
+        li._text = text;
+        return li;
+      }
+
+      function patchChatNode(li, msg) {
+        setAvatar(li._avatarWrap, msg.avatarUrl, msg.user, "avatar", () => scheduleStickToEnd(chatList));
+        li._user.textContent = msg.user || "";
+        li._handle.textContent = msg.handle ? `@${msg.handle.replace(/^@/, "")}` : shortDid(msg.did);
+        li._text.textContent = msg.text || "";
+      }
+
+      function createQueueNode() {
+        const li = document.createElement("li");
+        li.className = "queue-item";
+
+        const head = document.createElement("div");
+        head.className = "queue-head";
+        const avatarWrap = document.createElement("div");
+        avatarWrap.className = "queue-avatar-slot";
+        const handle = document.createElement("span");
+        handle.className = "handle";
+        head.append(avatarWrap, handle);
+
+        const cmd = document.createElement("span");
+        cmd.className = "cmd";
+        const user = document.createElement("span");
+        user.className = "user";
+        const state = document.createElement("span");
+        state.className = "state";
+
+        li.append(head, cmd, user, state);
+        li._avatarWrap = avatarWrap;
+        li._handle = handle;
+        li._cmd = cmd;
+        li._user = user;
+        li._state = state;
+        return li;
+      }
+
+      function patchQueueNode(li, item, activeCommandId) {
+        const activeState = activeCommandId === item.id ? "active" : item.status;
+        li.className = `queue-item ${activeState}`;
+        setAvatar(li._avatarWrap, item.avatarUrl, item.user, "queue-avatar", () =>
+          scheduleStickToEnd(queueList, true),
+        );
+        li._handle.textContent = item.handle ? `@${item.handle.replace(/^@/, "")}` : shortDid(item.did);
+        li._cmd.textContent = (item.command || "").toUpperCase();
+        li._user.textContent = shortDid(item.did);
+        li._state.textContent = item.status || "";
+      }
+
+      function reconcileList(listEl, nodesById, items, patchNode, createNode, ...patchArgs) {
+        const seen = new Set();
+        let index = 0;
+
+        for (const item of items) {
+          const id = item.id;
+          let node = nodesById.get(id);
+          if (!node) {
+            node = createNode();
+            node.dataset.id = id;
+            nodesById.set(id, node);
+          }
+          patchNode(node, item, ...patchArgs);
+          const currentAtIndex = listEl.children[index] || null;
+          if (currentAtIndex !== node) {
+            listEl.insertBefore(node, currentAtIndex);
+          }
+          seen.add(id);
+          index += 1;
+        }
+
+        for (const [id, node] of nodesById) {
+          if (seen.has(id)) {
+            continue;
+          }
+          nodesById.delete(id);
+          node.remove();
+        }
+      }
+
+      function render(state) {
+        reconcileList(chatList, chatNodes, filterChat(state.chat), patchChatNode, createChatNode);
+        scheduleStickToEnd(chatList);
+
+        reconcileList(
+          queueList,
+          queueNodes,
+          state.queue,
+          patchQueueNode,
+          createQueueNode,
+          state.activeCommandId,
+        );
+        scheduleStickToEnd(queueList, true);
+      }
+
+      const events = new EventSource("/events");
+
+      events.onopen = () => {
+        statusEl.textContent = "Connected";
+      };
+
+      events.onerror = () => {
+        statusEl.textContent = "Reconnecting...";
+      };
+
+      events.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          render(data);
+        } catch {
+          statusEl.textContent = "Bad event payload";
+        }
+      };
+    </script>
+  </body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "streamplace-plays-pokemon",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@atcute/client": "^4.2.1",
+    "@atcute/jetstream": "^1.1.2"
+  }
+}
