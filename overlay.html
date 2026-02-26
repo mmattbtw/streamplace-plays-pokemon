@@ -40,6 +40,13 @@
         --orb-label-bg: rgba(255, 255, 255, 0.86);
         --orb-label-text: #2a3970;
         --orb-opacity: 0.42;
+        --bg-howto: rgba(255, 252, 236, 0.92);
+        --howto-border: rgba(63, 123, 247, 0.44);
+        --howto-label: #3f7bf7;
+        --howto-tip-bg: rgba(255, 255, 255, 0.64);
+        --howto-tip-text: #2a3b70;
+        --howto-icon-bg: rgba(63, 123, 247, 0.12);
+        --queue-panel-height: 84px;
         --frame-radius: 20px;
         --panel-offset-x: 1.2vw;
         --panel-offset-y: 2vh;
@@ -77,6 +84,13 @@
         --orb-label-bg: rgba(20, 30, 58, 0.78);
         --orb-label-text: #d5e4ff;
         --orb-opacity: 0.32;
+        --bg-howto: rgba(20, 29, 56, 0.9);
+        --howto-border: rgba(132, 162, 255, 0.45);
+        --howto-label: #9ec0ff;
+        --howto-tip-bg: rgba(34, 49, 92, 0.72);
+        --howto-tip-text: #e3edff;
+        --howto-icon-bg: rgba(132, 162, 255, 0.18);
+        --queue-panel-height: 84px;
         --frame-radius: 20px;
         --panel-offset-x: 1.2vw;
         --panel-offset-y: 2vh;
@@ -276,6 +290,87 @@
         word-break: break-word;
       }
 
+      .how-to-play-panel {
+        position: absolute;
+        right: var(--panel-offset-x);
+        top: calc(var(--panel-offset-y) + 76vh + 8px);
+        bottom: calc(var(--panel-offset-y) + var(--queue-panel-height) + 8px);
+        width: min(32vw, 460px);
+        padding: 8px 12px 10px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 6px;
+        border: 2px dashed var(--howto-border);
+        border-radius: 14px;
+        background: var(--bg-howto);
+        box-shadow: 0 7px 16px var(--panel-shadow);
+        z-index: 2;
+        transition: background-color 280ms ease, border-color 280ms ease, box-shadow 280ms ease;
+      }
+
+      .how-to-play-label {
+        margin: 0;
+        color: var(--howto-label);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 10px;
+        font-weight: 800;
+        text-align: center;
+      }
+
+      .how-to-play-message {
+        margin: 4px 0 0;
+        width: 100%;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.25;
+        min-height: calc(1.25em * 2 + 12px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--howto-tip-text);
+        background: var(--howto-tip-bg);
+        border: 1px solid var(--howto-border);
+        border-radius: 10px;
+        padding: 4px 6px;
+        text-align: center;
+        transition: opacity 180ms ease;
+      }
+
+      .how-to-play-message.is-changing {
+        opacity: 0;
+      }
+
+      .how-to-play-icons {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .howto-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 38px;
+        height: 20px;
+        border-radius: 7px;
+        border: 1px solid var(--howto-border);
+        background: var(--howto-icon-bg);
+        color: var(--howto-tip-text);
+        font-size: 11px;
+        line-height: 1;
+        font-weight: 800;
+        padding: 0 6px;
+      }
+
+      .howto-icon.long {
+        min-width: 54px;
+      }
+
       .queue-panel {
         position: absolute;
         left: var(--panel-offset-x);
@@ -459,6 +554,10 @@
           height: 62vh;
         }
 
+        .how-to-play-panel {
+          display: none;
+        }
+
         .chat-text {
           font-size: 15px;
         }
@@ -480,6 +579,21 @@
         <div id="spam-toast" class="spam-toast" aria-live="polite"></div>
       </section>
 
+      <section class="how-to-play-panel" aria-live="polite">
+        <p class="how-to-play-label">How To Play</p>
+        <div class="how-to-play-icons" aria-hidden="true">
+          <span class="howto-icon">up</span>
+          <span class="howto-icon">down</span>
+          <span class="howto-icon">left</span>
+          <span class="howto-icon">right</span>
+          <span class="howto-icon">A</span>
+          <span class="howto-icon">B</span>
+          <span class="howto-icon long">start</span>
+          <span class="howto-icon long">select</span>
+        </div>
+        <p id="how-to-play-message" class="how-to-play-message"></p>
+      </section>
+
       <section class="queue-panel">
         <ul id="queue-list" class="queue-list"></ul>
         <div class="queue-footer">
@@ -497,6 +611,8 @@
       const statusEl = document.getElementById("status");
       const spamAbilityEl = document.getElementById("spam-ability");
       const spamToastEl = document.getElementById("spam-toast");
+      const howToPlayMessageEl = document.getElementById("how-to-play-message");
+      const queuePanelEl = document.querySelector(".queue-panel");
       const orbFieldEl = document.querySelector(".orb-field");
       const query = new URLSearchParams(window.location.search);
       const chatMode = query.get("chat") || "non_commands";
@@ -505,6 +621,13 @@
       let lastSpamEnabled = null;
       let lastTestMessageId = "";
       let spamToastTimer = null;
+      let howToPlayIndex = 0;
+      const HOW_TO_PLAY_TIPS = [
+        "Type buttons as commands like a, b, up, down, start, or select.",
+        "Hold a button longer with a trailing dash: a-",
+        "Spam a command by adding a repeat count: a x10",
+        "Combine inputs in one command with plus: a+b",
+      ];
       const BALL_SPRITES = [
         "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png",
         "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/great-ball.png",
@@ -667,10 +790,56 @@
         requestAnimationFrame(frame);
       }
 
+      function setHowToPlayTip(nextIndex) {
+        if (!howToPlayMessageEl) {
+          return;
+        }
+
+        howToPlayIndex = nextIndex % HOW_TO_PLAY_TIPS.length;
+        const nextTip = HOW_TO_PLAY_TIPS[howToPlayIndex];
+        const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (prefersReducedMotion) {
+          howToPlayMessageEl.textContent = nextTip;
+          return;
+        }
+
+        howToPlayMessageEl.classList.add("is-changing");
+        setTimeout(() => {
+          howToPlayMessageEl.textContent = nextTip;
+          howToPlayMessageEl.classList.remove("is-changing");
+        }, 170);
+      }
+
+      function startHowToPlayRotation() {
+        if (!howToPlayMessageEl || HOW_TO_PLAY_TIPS.length === 0) {
+          return;
+        }
+
+        howToPlayMessageEl.textContent = HOW_TO_PLAY_TIPS[0];
+        if (HOW_TO_PLAY_TIPS.length === 1) {
+          return;
+        }
+
+        setInterval(() => {
+          setHowToPlayTip((howToPlayIndex + 1) % HOW_TO_PLAY_TIPS.length);
+        }, 4200);
+      }
+
+      function syncHowToPlayGap() {
+        if (!queuePanelEl) {
+          return;
+        }
+        const queueHeight = Math.ceil(queuePanelEl.getBoundingClientRect().height);
+        document.documentElement.style.setProperty("--queue-panel-height", `${queueHeight}px`);
+      }
+
       applyThemeFromLocalTime();
       populateOrbField();
       setInterval(applyThemeFromLocalTime, 60 * 1000);
       startOrbBounce();
+      startHowToPlayRotation();
+      syncHowToPlayGap();
+      window.addEventListener("resize", syncHowToPlayGap);
 
       function initial(text) {
         const trimmed = (text || "").trim();
@@ -810,13 +979,13 @@
               case "right":
                 return "→";
               case "a":
-                return "Ⓐ";
+                return "A";
               case "b":
-                return "Ⓑ";
+                return "B";
               case "l":
-                return "Ⓛ";
+                return "L";
               case "r":
-                return "Ⓡ";
+                return "R";
               case "start":
                 return "START";
               case "select":
@@ -869,7 +1038,7 @@
         li._cmd.textContent = item.commandLabel;
         li._cmd.classList.toggle(
           "compact-circle",
-          /^[←→↑↓ⒶⒷⓁⓇ]$/.test(item.commandLabel || ""),
+          /^[←→↑↓ABLR]$/.test(item.commandLabel || ""),
         );
         li._repeat.textContent = item.count > 1 ? `x${item.count}` : "";
       }
@@ -911,6 +1080,7 @@
         const collapsedQueue = collapseQueue(state.queue, state.activeCommandId);
         reconcileList(queueList, queueNodes, collapsedQueue, patchQueueNode, createQueueNode);
         scheduleStickToEnd(queueList, true);
+        syncHowToPlayGap();
 
         if (spamAbilityEl && state.spamAbility) {
           const enabled = Boolean(state.spamAbility.enabled);
