@@ -878,6 +878,13 @@
         return chat.filter((msg) => !msg.isCommand);
       }
 
+      function randomBallSprite() {
+        if (BALL_SPRITES.length === 0) {
+          return "";
+        }
+        return BALL_SPRITES[Math.floor(Math.random() * BALL_SPRITES.length)];
+      }
+
       function createAvatarNode(url, label, className, onLoad) {
         if (url) {
           const img = document.createElement("img");
@@ -885,6 +892,18 @@
           img.src = url;
           img.alt = label || "";
           img.addEventListener("load", onLoad, { once: true });
+          img.addEventListener(
+            "error",
+            () => {
+              const fallbackUrl = randomBallSprite();
+              if (!fallbackUrl || img.src === fallbackUrl) {
+                return;
+              }
+              img.src = fallbackUrl;
+              img.alt = `${label || "Trainer"} avatar fallback`;
+            },
+            { once: true }
+          );
           return img;
         }
         const fallback = document.createElement("span");
