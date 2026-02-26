@@ -6,15 +6,80 @@
     <title>Stream Overlay</title>
     <style>
       :root {
-        --bg-chat: rgba(8, 12, 18, 0.54);
-        --bg-queue: rgba(4, 8, 14, 0.64);
-        --border: rgba(159, 181, 205, 0.28);
-        --text: #f4f8fc;
-        --muted: #9db2c6;
-        --active: #79ffe1;
-        --queued: #9ad4ff;
-        --done: #7c8ba2;
-        --error: #ff7e7e;
+        --page-bg: #dff0ff;
+        --bg-chat: rgba(255, 252, 236, 0.92);
+        --bg-queue: rgba(255, 255, 255, 0.93);
+        --border: rgba(44, 65, 122, 0.28);
+        --text: #24315f;
+        --muted: #5267a0;
+        --active: #ff5252;
+        --queued: #3f7bf7;
+        --done: #8f9fc8;
+        --error: #d64545;
+        --yellow: #ffd84b;
+        --blue: #3f7bf7;
+        --red: #ff5252;
+        --cream: #fff9de;
+        --panel-shadow: rgba(44, 65, 122, 0.16);
+        --panel-item-bg: rgba(255, 255, 255, 0.9);
+        --queue-pill-bg: #fff9de;
+        --queue-command-bg: #ffeaea;
+        --queue-command-text: #a32626;
+        --queue-user-text: #2b3f74;
+        --overlay-dot: rgba(63, 123, 247, 0.1);
+        --overlay-dot-strong: rgba(255, 216, 75, 0.2);
+        --ability-enabled-bg: #e7ffe8;
+        --ability-enabled-text: #1f7a2f;
+        --ability-enabled-border: rgba(53, 176, 78, 0.82);
+        --ability-disabled-bg: #fff2f2;
+        --ability-disabled-border: rgba(214, 69, 69, 0.7);
+        --orb-outline: rgba(20, 32, 70, 0.22);
+        --orb-band: rgba(26, 36, 74, 0.7);
+        --orb-button: #ffffff;
+        --orb-button-ring: rgba(26, 36, 74, 0.42);
+        --orb-label-bg: rgba(255, 255, 255, 0.86);
+        --orb-label-text: #2a3970;
+        --orb-opacity: 0.42;
+        --frame-radius: 20px;
+        --panel-offset-x: 1.2vw;
+        --panel-offset-y: 2vh;
+      }
+
+      :root[data-theme="night"] {
+        --page-bg: #101a35;
+        --bg-chat: rgba(22, 33, 66, 0.9);
+        --bg-queue: rgba(20, 29, 56, 0.92);
+        --border: rgba(132, 162, 255, 0.32);
+        --text: #e8efff;
+        --muted: #afc3f4;
+        --active: #ff7a7a;
+        --queued: #86b2ff;
+        --done: #7788b0;
+        --error: #ff9a9a;
+        --cream: #23325e;
+        --panel-shadow: rgba(6, 10, 24, 0.4);
+        --panel-item-bg: rgba(27, 39, 74, 0.9);
+        --queue-pill-bg: #1f2e58;
+        --queue-command-bg: #3c2a4f;
+        --queue-command-text: #ffd0d0;
+        --queue-user-text: #e4ecff;
+        --overlay-dot: rgba(134, 178, 255, 0.08);
+        --overlay-dot-strong: rgba(255, 237, 143, 0.12);
+        --ability-enabled-bg: #213d2b;
+        --ability-enabled-text: #b8ffca;
+        --ability-enabled-border: rgba(104, 230, 138, 0.78);
+        --ability-disabled-bg: #3c2630;
+        --ability-disabled-border: rgba(255, 144, 144, 0.72);
+        --orb-outline: rgba(186, 204, 255, 0.28);
+        --orb-band: rgba(209, 222, 255, 0.55);
+        --orb-button: #dce7ff;
+        --orb-button-ring: rgba(186, 204, 255, 0.46);
+        --orb-label-bg: rgba(20, 30, 58, 0.78);
+        --orb-label-text: #d5e4ff;
+        --orb-opacity: 0.32;
+        --frame-radius: 20px;
+        --panel-offset-x: 1.2vw;
+        --panel-offset-y: 2vh;
       }
 
       * {
@@ -27,9 +92,10 @@
         height: 100%;
         margin: 0;
         overflow: hidden;
-        background: transparent;
+        background: var(--page-bg);
         color: var(--text);
         font-family: "Avenir Next", "Segoe UI", sans-serif;
+        transition: background-color 280ms ease, color 280ms ease;
       }
 
       .overlay {
@@ -37,32 +103,78 @@
         width: 100%;
         height: 100%;
         pointer-events: none;
+        overflow: hidden;
+      }
+
+      .overlay::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .overlay::after {
+        border: 12px solid rgba(255, 255, 255, 0.18);
+        border-radius: var(--frame-radius);
+        left: var(--panel-offset-x);
+        right: var(--panel-offset-x);
+        top: var(--panel-offset-y);
+        bottom: var(--panel-offset-y);
+        opacity: 0.4;
+        z-index: 0;
+      }
+
+      .orb-field {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+      }
+
+      .ball-orb {
+        position: absolute;
+        width: 84px;
+        height: 84px;
+        border-radius: 50%;
+        overflow: visible;
+        opacity: var(--orb-opacity);
+        transform: scale(var(--orb-scale, 1));
+        will-change: left, top, transform;
+      }
+      .ball-sprite {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        image-rendering: pixelated;
+        filter: drop-shadow(0 5px 10px rgba(10, 18, 36, 0.35));
+        user-select: none;
       }
 
       .chat-panel {
         position: absolute;
-        top: 2vh;
-        right: 1.2vw;
+        top: var(--panel-offset-y);
+        right: var(--panel-offset-x);
         width: min(32vw, 460px);
         height: 76vh;
         display: flex;
         flex-direction: column;
         gap: 8px;
         padding: 14px;
-        border: 1px solid var(--border);
-        border-radius: 18px;
-        background:
-          radial-gradient(circle at 20% 0%, rgba(121, 255, 225, 0.13), transparent 58%),
-          var(--bg-chat);
-        backdrop-filter: blur(8px);
+        border: 2px solid var(--border);
+        border-radius: var(--frame-radius);
+        background: var(--bg-chat);
+        box-shadow: 0 10px 24px var(--panel-shadow);
+        z-index: 2;
+        transition: background-color 280ms ease, border-color 280ms ease, box-shadow 280ms ease;
       }
 
       .panel-title {
         text-transform: uppercase;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.08em;
         font-size: 12px;
-        color: var(--muted);
+        color: var(--blue);
         margin: 0 0 6px;
+        font-weight: 800;
       }
 
       .panel-head {
@@ -76,22 +188,26 @@
         font-size: 11px;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        border: 1px solid rgba(157, 178, 198, 0.45);
+        border: 2px solid rgba(63, 123, 247, 0.5);
         border-radius: 999px;
         padding: 5px 10px;
-        background: rgba(10, 17, 28, 0.55);
+        background: var(--cream);
         color: var(--muted);
         white-space: nowrap;
+        font-weight: 700;
+        transition: background-color 280ms ease, border-color 280ms ease, color 280ms ease;
       }
 
       .ability-badge.enabled {
-        border-color: rgba(121, 255, 225, 0.8);
-        color: var(--active);
+        border-color: var(--ability-enabled-border);
+        color: var(--ability-enabled-text);
+        background: var(--ability-enabled-bg);
       }
 
       .ability-badge.disabled {
-        border-color: rgba(255, 126, 126, 0.7);
+        border-color: var(--ability-disabled-border);
         color: var(--error);
+        background: var(--ability-disabled-bg);
       }
 
       .chat-list {
@@ -112,14 +228,15 @@
       }
 
       .chat-item {
-        border: 1px solid rgba(157, 178, 198, 0.26);
-        border-radius: 12px;
+        border: 2px solid rgba(63, 123, 247, 0.22);
+        border-radius: 16px;
         padding: 9px 11px;
-        background: rgba(10, 17, 28, 0.55);
+        background: var(--panel-item-bg);
         animation: enter 220ms ease-out;
         display: grid;
         grid-template-columns: 34px 1fr;
         gap: 9px;
+        transition: background-color 280ms ease, border-color 280ms ease;
       }
 
       .avatar {
@@ -127,8 +244,8 @@
         height: 34px;
         border-radius: 50%;
         object-fit: cover;
-        border: 1px solid rgba(176, 236, 255, 0.45);
-        background: rgba(157, 178, 198, 0.25);
+        border: 2px solid rgba(255, 82, 82, 0.52);
+        background: rgba(255, 216, 75, 0.4);
       }
 
       .avatar.fallback {
@@ -136,17 +253,17 @@
         place-items: center;
         font-size: 12px;
         font-weight: 700;
-        color: #d9f5ff;
+        color: var(--text);
       }
 
       .chat-user {
-        font-size: 12px;
-        font-weight: 650;
-        color: #b0ecff;
+        font-size: 15px;
+        font-weight: 750;
+        color: var(--queued);
       }
 
       .chat-handle {
-        font-size: 11px;
+        font-size: 13px;
         color: var(--muted);
       }
 
@@ -160,19 +277,78 @@
 
       .queue-panel {
         position: absolute;
-        left: 1.2vw;
-        right: 1.2vw;
-        bottom: 2vh;
+        left: var(--panel-offset-x);
+        right: var(--panel-offset-x);
+        bottom: var(--panel-offset-y);
         display: flex;
         flex-direction: column;
+        gap: 8px;
+        padding: 8px 14px 10px;
+        border: 2px solid var(--border);
+        border-radius: var(--frame-radius);
+        background: var(--bg-queue);
+        box-shadow: 0 8px 20px var(--panel-shadow);
+        z-index: 2;
+        overflow: visible;
+        transition: background-color 280ms ease, border-color 280ms ease, box-shadow 280ms ease;
+      }
+
+      .spam-toast-rail {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: calc(100% - 2px);
+        height: clamp(64px, 7.4vw, 110px);
+        overflow: hidden;
+        pointer-events: none;
+        z-index: 4;
+      }
+
+      .spam-toast {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        transform: translateY(110%) scale(0.98);
+        opacity: 0;
+        pointer-events: none;
+        width: 100%;
+        text-align: center;
+        padding: 14px 20px;
+        border-radius: var(--frame-radius);
+        border: 3px solid transparent;
+        font-size: clamp(22px, 3.2vw, 42px);
+        font-weight: 900;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        z-index: 4;
+        transition: transform 320ms cubic-bezier(0.2, 0.9, 0.2, 1), opacity 220ms ease;
+      }
+
+      .spam-toast.show {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+      }
+
+      .spam-toast.enabled {
+        background: rgba(51, 185, 83, 0.92);
+        border-color: rgba(215, 255, 223, 0.92);
+        color: #ffffff;
+        box-shadow: 0 14px 28px rgba(27, 116, 47, 0.42);
+      }
+
+      .spam-toast.disabled {
+        background: rgba(211, 68, 68, 0.93);
+        border-color: rgba(255, 219, 219, 0.92);
+        color: #ffffff;
+        box-shadow: 0 14px 28px rgba(120, 28, 28, 0.42);
+      }
+
+      .queue-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
         gap: 10px;
-        padding: 12px 14px 14px;
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        background:
-          linear-gradient(90deg, rgba(122, 165, 255, 0.15), rgba(121, 255, 225, 0.1)),
-          var(--bg-queue);
-        backdrop-filter: blur(9px);
       }
 
       .queue-list {
@@ -180,7 +356,8 @@
         padding: 0;
         list-style: none;
         display: flex;
-        gap: 10px;
+        gap: 6px;
+        align-items: center;
         overflow-x: auto;
         scrollbar-width: none;
       }
@@ -190,65 +367,62 @@
       }
 
       .queue-item {
-        min-width: 150px;
-        padding: 9px 10px;
-        border-radius: 12px;
-        border: 1px solid rgba(154, 212, 255, 0.4);
-        background: rgba(9, 15, 24, 0.62);
-        display: grid;
-        gap: 2px;
-        transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
-      }
-
-      .queue-head {
-        display: grid;
-        grid-template-columns: 22px 1fr;
+        padding: 4px 8px 4px 9px;
+        border-radius: 999px;
+        border: 2px solid rgba(63, 123, 247, 0.28);
+        background: var(--queue-pill-bg);
+        display: flex;
         align-items: center;
         gap: 7px;
+        white-space: nowrap;
+        transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
       }
 
-      .queue-avatar {
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        object-fit: cover;
-        border: 1px solid rgba(176, 236, 255, 0.5);
-        background: rgba(157, 178, 198, 0.3);
-      }
-
-      .queue-avatar.fallback {
-        display: grid;
-        place-items: center;
-        font-size: 10px;
-        font-weight: 700;
-        color: #d9f5ff;
-      }
-
-      .queue-item .cmd {
-        font-size: 20px;
+      .queue-item .queue-user {
+        color: var(--queue-user-text);
+        font-size: 13px;
         line-height: 1;
         font-weight: 700;
-        letter-spacing: 0.04em;
       }
 
-      .queue-item .user {
-        color: var(--muted);
+      .queue-item .queue-separator {
+        color: rgba(82, 103, 160, 0.8);
         font-size: 12px;
+        line-height: 1;
       }
 
-      .queue-item .handle {
-        color: #b0ecff;
-        font-size: 11px;
+      .queue-item .queue-command {
+        min-width: 22px;
+        height: 22px;
+        padding: 0 8px;
+        border-radius: 999px;
+        border: 2px solid rgba(255, 82, 82, 0.45);
+        background: var(--queue-command-bg);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--queue-command-text);
+        font-size: 14px;
+        line-height: 1;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        transition: background-color 280ms ease, border-color 280ms ease, color 280ms ease;
       }
 
-      .queue-item .state {
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.11em;
+      .queue-item .queue-command.compact-circle {
+        min-width: 22px;
+        width: 22px;
+        padding: 0;
+      }
+
+      .queue-item .queue-repeat {
+        color: #3f7bf7;
+        font-size: 12px;
+        font-weight: 700;
       }
 
       .queue-item.queued {
-        border-color: rgba(154, 212, 255, 0.42);
+        border-color: rgba(63, 123, 247, 0.52);
       }
 
       .queue-item.queued .state {
@@ -257,34 +431,25 @@
 
       .queue-item.active {
         border-color: var(--active);
-        box-shadow: 0 0 0 2px rgba(121, 255, 225, 0.26), 0 0 28px rgba(121, 255, 225, 0.28);
-        transform: translateY(-2px) scale(1.03);
-      }
-
-      .queue-item.active .state {
-        color: var(--active);
+        box-shadow: 0 0 0 2px rgba(255, 82, 82, 0.2), 0 4px 12px rgba(255, 82, 82, 0.22);
+        transform: translateY(-1px);
+        background: #fff0f0;
       }
 
       .queue-item.done {
-        opacity: 0.65;
-        border-color: rgba(124, 139, 162, 0.42);
-      }
-
-      .queue-item.done .state {
-        color: var(--done);
+        opacity: 0.58;
+        border-color: rgba(143, 159, 200, 0.5);
       }
 
       .queue-item.error {
         border-color: rgba(255, 126, 126, 0.6);
-      }
-
-      .queue-item.error .state {
         color: var(--error);
       }
 
       .status {
         font-size: 12px;
         color: var(--muted);
+        font-weight: 700;
       }
 
       @keyframes enter {
@@ -308,34 +473,215 @@
           font-size: 15px;
         }
       }
+
+      @media (prefers-reduced-motion: reduce) {
+        .ball-orb {
+          transition: none;
+        }
+      }
     </style>
   </head>
   <body>
     <div class="overlay">
+      <div class="orb-field" aria-hidden="true"></div>
+
       <section class="chat-panel">
-        <h2 class="panel-title">Live Chat</h2>
         <ul id="chat-list" class="chat-list"></ul>
       </section>
 
       <section class="queue-panel">
-        <div class="panel-head">
-          <h2 class="panel-title">Command Queue</h2>
+        <ul id="queue-list" class="queue-list"></ul>
+        <div class="queue-footer">
+          <div id="status" class="status">Connecting...</div>
           <div id="spam-ability" class="ability-badge">Spam: Unknown</div>
         </div>
-        <ul id="queue-list" class="queue-list"></ul>
-        <div id="status" class="status">Connecting...</div>
+        <div class="spam-toast-rail">
+          <div id="spam-toast" class="spam-toast" aria-live="polite"></div>
+        </div>
       </section>
     </div>
 
     <script>
+      const DAY_START_HOUR = 6;
+      const NIGHT_START_HOUR = 18;
       const chatList = document.getElementById("chat-list");
       const queueList = document.getElementById("queue-list");
       const statusEl = document.getElementById("status");
       const spamAbilityEl = document.getElementById("spam-ability");
+      const spamToastEl = document.getElementById("spam-toast");
+      const orbFieldEl = document.querySelector(".orb-field");
       const query = new URLSearchParams(window.location.search);
       const chatMode = query.get("chat") || "non_commands";
       const chatNodes = new Map();
       const queueNodes = new Map();
+      let lastSpamEnabled = null;
+      let spamToastTimer = null;
+      const BALL_SPRITES = [
+        "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png",
+        "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/great-ball.png",
+        "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/ultra-ball.png",
+        "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/master-ball.png",
+        "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/premier-ball.png",
+        "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/dusk-ball.png",
+        "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/timer-ball.png",
+        "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/luxury-ball.png",
+        "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/quick-ball.png",
+        "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/heal-ball.png",
+        "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/nest-ball.png",
+        "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/repeat-ball.png",
+      ];
+
+      function themeByHour(hour) {
+        return hour >= DAY_START_HOUR && hour < NIGHT_START_HOUR ? "day" : "night";
+      }
+
+      function applyThemeFromLocalTime() {
+        const now = new Date();
+        document.documentElement.setAttribute("data-theme", themeByHour(now.getHours()));
+      }
+
+      function showSpamToast(enabled) {
+        if (!spamToastEl) {
+          return;
+        }
+
+        spamToastEl.textContent = enabled ? "SPAM COMMANDS" : "SPAM DISABLED";
+        spamToastEl.classList.toggle("enabled", enabled);
+        spamToastEl.classList.toggle("disabled", !enabled);
+        spamToastEl.classList.remove("show");
+        void spamToastEl.offsetWidth;
+        spamToastEl.classList.add("show");
+
+        if (spamToastTimer) {
+          clearTimeout(spamToastTimer);
+        }
+        spamToastTimer = setTimeout(() => {
+          spamToastEl.classList.remove("show");
+        }, 2400);
+      }
+
+      function populateOrbField() {
+        if (!orbFieldEl) {
+          return;
+        }
+        const orbCount = 120;
+        orbFieldEl.replaceChildren();
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        for (let i = 0; i < orbCount; i += 1) {
+          const orb = document.createElement("div");
+          orb.className = "ball-orb";
+          const scale = 0.56 + Math.random() * 0.7;
+          orb.style.setProperty("--orb-scale", scale.toFixed(3));
+          orb.style.opacity = `${0.2 + Math.random() * 0.35}`;
+          orb.style.left = `${Math.floor(Math.random() * Math.max(1, width - 84))}px`;
+          orb.style.top = `${Math.floor(Math.random() * Math.max(1, height - 84))}px`;
+
+          const img = document.createElement("img");
+          img.className = "ball-sprite";
+          img.src = BALL_SPRITES[i % BALL_SPRITES.length];
+          img.alt = "";
+          orb.append(img);
+          orbFieldEl.append(orb);
+        }
+      }
+
+      function startOrbBounce() {
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          return;
+        }
+
+        const overlay = document.querySelector(".overlay");
+        const orbs = Array.from(document.querySelectorAll(".ball-orb"));
+        if (!overlay || orbs.length === 0) {
+          return;
+        }
+
+        const states = orbs.map((orb, index) => {
+          const scale = parseFloat(getComputedStyle(orb).getPropertyValue("--orb-scale")) || 1;
+          const width = orb.offsetWidth * scale;
+          const height = orb.offsetHeight * scale;
+          const angle = ((index * 67) % 360) * (Math.PI / 180);
+          const speed = 14 + (index % 5) * 3;
+
+          return {
+            orb,
+            x: orb.offsetLeft,
+            y: orb.offsetTop,
+            vx: Math.cos(angle) * (speed / 1000),
+            vy: Math.sin(angle) * (speed / 1000),
+            width,
+            height,
+          };
+        });
+
+        function refreshBounds() {
+          const maxWidth = window.innerWidth;
+          const maxHeight = window.innerHeight;
+
+          for (const state of states) {
+            const scale = parseFloat(getComputedStyle(state.orb).getPropertyValue("--orb-scale")) || 1;
+            state.width = state.orb.offsetWidth * scale;
+            state.height = state.orb.offsetHeight * scale;
+            state.x = Math.min(Math.max(state.x, 0), Math.max(0, maxWidth - state.width));
+            state.y = Math.min(Math.max(state.y, 0), Math.max(0, maxHeight - state.height));
+            state.orb.style.left = `${state.x}px`;
+            state.orb.style.top = `${state.y}px`;
+          }
+        }
+
+        let lastTs = performance.now();
+        refreshBounds();
+
+        function frame(ts) {
+          const dt = Math.min(50, ts - lastTs);
+          lastTs = ts;
+          const maxWidth = window.innerWidth;
+          const maxHeight = window.innerHeight;
+
+          for (const state of states) {
+            if (getComputedStyle(state.orb).display === "none") {
+              continue;
+            }
+
+            state.x += state.vx * dt;
+            state.y += state.vy * dt;
+
+            const maxX = Math.max(0, maxWidth - state.width);
+            const maxY = Math.max(0, maxHeight - state.height);
+
+            if (state.x <= 0) {
+              state.x = 0;
+              state.vx = Math.abs(state.vx);
+            } else if (state.x >= maxX) {
+              state.x = maxX;
+              state.vx = -Math.abs(state.vx);
+            }
+
+            if (state.y <= 0) {
+              state.y = 0;
+              state.vy = Math.abs(state.vy);
+            } else if (state.y >= maxY) {
+              state.y = maxY;
+              state.vy = -Math.abs(state.vy);
+            }
+
+            state.orb.style.left = `${state.x}px`;
+            state.orb.style.top = `${state.y}px`;
+          }
+
+          requestAnimationFrame(frame);
+        }
+
+        window.addEventListener("resize", refreshBounds);
+        requestAnimationFrame(frame);
+      }
+
+      applyThemeFromLocalTime();
+      populateOrbField();
+      setInterval(applyThemeFromLocalTime, 60 * 1000);
+      startOrbBounce();
 
       function initial(text) {
         const trimmed = (text || "").trim();
@@ -427,7 +773,7 @@
       function patchChatNode(li, msg) {
         setAvatar(li._avatarWrap, msg.avatarUrl, msg.user, "avatar", () => scheduleStickToEnd(chatList));
         li._user.textContent = msg.user || "";
-        li._handle.textContent = msg.handle ? `@${msg.handle.replace(/^@/, "")}` : shortDid(msg.did);
+        li._handle.textContent = msg.handle ? ` @${msg.handle.replace(/^@/, "")}` : ` ${shortDid(msg.did)}`;
         li._text.textContent = msg.text || "";
       }
 
@@ -435,40 +781,108 @@
         const li = document.createElement("li");
         li.className = "queue-item";
 
-        const head = document.createElement("div");
-        head.className = "queue-head";
-        const avatarWrap = document.createElement("div");
-        avatarWrap.className = "queue-avatar-slot";
-        const handle = document.createElement("span");
-        handle.className = "handle";
-        head.append(avatarWrap, handle);
-
-        const cmd = document.createElement("span");
-        cmd.className = "cmd";
         const user = document.createElement("span");
-        user.className = "user";
-        const state = document.createElement("span");
-        state.className = "state";
+        user.className = "queue-user";
+        const separator = document.createElement("span");
+        separator.className = "queue-separator";
+        separator.textContent = ":";
+        const cmd = document.createElement("span");
+        cmd.className = "queue-command";
+        const repeat = document.createElement("span");
+        repeat.className = "queue-repeat";
 
-        li.append(head, cmd, user, state);
-        li._avatarWrap = avatarWrap;
-        li._handle = handle;
-        li._cmd = cmd;
+        li.append(user, separator, cmd, repeat);
         li._user = user;
-        li._state = state;
+        li._cmd = cmd;
+        li._repeat = repeat;
         return li;
       }
 
-      function patchQueueNode(li, item, activeCommandId) {
-        const activeState = activeCommandId === item.id ? "active" : item.status;
-        li.className = `queue-item ${activeState}`;
-        setAvatar(li._avatarWrap, item.avatarUrl, item.user, "queue-avatar", () =>
-          scheduleStickToEnd(queueList, true),
+      function formatQueueCommand(command) {
+        const normalized = (command || "").trim().toLowerCase();
+        if (!normalized) {
+          return "";
+        }
+
+        const isHold = normalized.endsWith("-");
+        const baseCommand = isHold ? normalized.slice(0, -1) : normalized;
+        const tokens = baseCommand
+          .split("+")
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .map((part) => {
+            switch (part) {
+              case "up":
+                return "↑";
+              case "down":
+                return "↓";
+              case "left":
+                return "←";
+              case "right":
+                return "→";
+              case "a":
+                return "Ⓐ";
+              case "b":
+                return "Ⓑ";
+              case "l":
+                return "Ⓛ";
+              case "r":
+                return "Ⓡ";
+              case "start":
+                return "START";
+              case "select":
+                return "SELECT";
+              default:
+                return part.toUpperCase();
+            }
+          });
+
+        return `${tokens.join("+")}${isHold ? "-" : ""}`;
+      }
+
+      function queueLabel(item) {
+        return item.handle ? `@${item.handle.replace(/^@/, "")}` : shortDid(item.did);
+      }
+
+      function collapseQueue(queue, activeCommandId) {
+        const collapsed = [];
+
+        for (const item of queue) {
+          const activeState = activeCommandId === item.id ? "active" : item.status;
+          const last = collapsed[collapsed.length - 1];
+          const canMerge =
+            last &&
+            last.status !== "active" &&
+            activeState !== "active" &&
+            last.userLabel === queueLabel(item) &&
+            last.commandLabel === formatQueueCommand(item.command);
+
+          if (canMerge) {
+            last.count += 1;
+            continue;
+          }
+
+          collapsed.push({
+            id: item.id,
+            status: activeState,
+            userLabel: queueLabel(item),
+            commandLabel: formatQueueCommand(item.command),
+            count: 1,
+          });
+        }
+
+        return collapsed;
+      }
+
+      function patchQueueNode(li, item) {
+        li.className = `queue-item ${item.status || "queued"}`;
+        li._user.textContent = item.userLabel;
+        li._cmd.textContent = item.commandLabel;
+        li._cmd.classList.toggle(
+          "compact-circle",
+          /^[←→↑↓ⒶⒷⓁⓇ]$/.test(item.commandLabel || ""),
         );
-        li._handle.textContent = item.handle ? `@${item.handle.replace(/^@/, "")}` : shortDid(item.did);
-        li._cmd.textContent = (item.command || "").toUpperCase();
-        li._user.textContent = shortDid(item.did);
-        li._state.textContent = item.status || "";
+        li._repeat.textContent = item.count > 1 ? `x${item.count}` : "";
       }
 
       function reconcileList(listEl, nodesById, items, patchNode, createNode, ...patchArgs) {
@@ -505,14 +919,8 @@
         reconcileList(chatList, chatNodes, filterChat(state.chat), patchChatNode, createChatNode);
         scheduleStickToEnd(chatList);
 
-        reconcileList(
-          queueList,
-          queueNodes,
-          state.queue,
-          patchQueueNode,
-          createQueueNode,
-          state.activeCommandId,
-        );
+        const collapsedQueue = collapseQueue(state.queue, state.activeCommandId);
+        reconcileList(queueList, queueNodes, collapsedQueue, patchQueueNode, createQueueNode);
         scheduleStickToEnd(queueList, true);
 
         if (spamAbilityEl && state.spamAbility) {
@@ -520,7 +928,15 @@
           spamAbilityEl.classList.toggle("enabled", enabled);
           spamAbilityEl.classList.toggle("disabled", !enabled);
           spamAbilityEl.textContent = `Spam: ${enabled ? "ENABLED" : "DISABLED"} (${state.spamAbility.uniqueChatters}/${state.spamAbility.threshold} chatters, ${state.spamAbility.windowMinutes}m)`;
+
+          if (lastSpamEnabled === null) {
+            lastSpamEnabled = enabled;
+          } else if (lastSpamEnabled !== enabled) {
+            showSpamToast(enabled);
+            lastSpamEnabled = enabled;
+          }
         }
+
       }
 
       const events = new EventSource("/events");
