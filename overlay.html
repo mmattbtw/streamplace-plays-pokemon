@@ -47,6 +47,7 @@
         --howto-tip-text: #2a3b70;
         --howto-icon-bg: rgba(63, 123, 247, 0.12);
         --queue-panel-height: 84px;
+        --chat-panel-height: 72vh;
         --frame-radius: 20px;
         --panel-offset-x: 1.2vw;
         --panel-offset-y: 2vh;
@@ -91,6 +92,7 @@
         --howto-tip-text: #e3edff;
         --howto-icon-bg: rgba(132, 162, 255, 0.18);
         --queue-panel-height: 84px;
+        --chat-panel-height: 72vh;
         --frame-radius: 20px;
         --panel-offset-x: 1.2vw;
         --panel-offset-y: 2vh;
@@ -169,7 +171,7 @@
         top: var(--panel-offset-y);
         right: var(--panel-offset-x);
         width: min(32vw, 460px);
-        height: 76vh;
+        height: var(--chat-panel-height);
         display: flex;
         flex-direction: column;
         gap: 8px;
@@ -293,7 +295,7 @@
       .how-to-play-panel {
         position: absolute;
         right: var(--panel-offset-x);
-        top: calc(var(--panel-offset-y) + 76vh + 8px);
+        top: calc(var(--panel-offset-y) + var(--chat-panel-height) + 8px);
         bottom: calc(var(--panel-offset-y) + var(--queue-panel-height) + 8px);
         width: min(32vw, 460px);
         padding: 8px 12px 10px;
@@ -551,7 +553,7 @@
       @media (max-width: 900px) {
         .chat-panel {
           width: min(56vw, 420px);
-          height: 62vh;
+          height: 58vh;
         }
 
         .how-to-play-panel {
