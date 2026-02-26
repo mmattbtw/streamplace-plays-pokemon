@@ -23,7 +23,9 @@ const DRY_RUN = process.env.DRY_RUN === "1";
 const OVERLAY_PORT = Number.parseInt(process.env.OVERLAY_PORT ?? "8080", 10);
 const SLINGSHOT_URL =
   process.env.SLINGSHOT_URL ?? "https://slingshot.microcosm.blue";
-const MAX_CHAT_MESSAGES = 35;
+const MAX_NON_COMMAND_CHAT_MESSAGES = 80;
+const MAX_COMMAND_CHAT_MESSAGES = 160;
+const MAX_TOTAL_CHAT_MESSAGES = 240;
 const MAX_QUEUE_ITEMS = 40;
 const IDENTITY_CACHE_TTL_MS = 15 * 60 * 1000;
 const CHATTER_WINDOW_MS = 10 * 60 * 1000;
@@ -103,6 +105,7 @@ const SUPPORTED_COMMANDS = new Set([
 
 const overlayClients = new Set<ReadableStreamDefaultController<string>>();
 const chatMessages: ChatMessage[] = [];
+const commandChatMessages: ChatMessage[] = [];
 const commandQueue: QueueItem[] = [];
 const identityCache = new Map<
   string,
@@ -324,8 +327,11 @@ function cachedIdentityForDid(did: string): ResolvedIdentity | null {
 
 function snapshot(): OverlaySnapshot {
   const uniqueChatters = countUniqueChattersInWindow(Date.now());
+  const chat = [...chatMessages, ...commandChatMessages]
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .slice(-MAX_TOTAL_CHAT_MESSAGES);
   return {
-    chat: chatMessages,
+    chat,
     queue: commandQueue,
     activeCommandId,
     spamAbility: {
@@ -370,9 +376,13 @@ function pushChatMessage(
     createdAt: Date.now(),
   };
 
-  chatMessages.push(message);
-  if (chatMessages.length > MAX_CHAT_MESSAGES) {
-    chatMessages.splice(0, chatMessages.length - MAX_CHAT_MESSAGES);
+  const target = isCommand ? commandChatMessages : chatMessages;
+  const limit = isCommand
+    ? MAX_COMMAND_CHAT_MESSAGES
+    : MAX_NON_COMMAND_CHAT_MESSAGES;
+  target.push(message);
+  if (target.length > limit) {
+    target.splice(0, target.length - limit);
   }
 
   broadcast();
@@ -381,21 +391,23 @@ function pushChatMessage(
 function applyIdentityToOverlay(identity: ResolvedIdentity): void {
   let changed = false;
 
-  for (const message of chatMessages) {
-    if (message.did !== identity.did) {
-      continue;
-    }
+  for (const messages of [chatMessages, commandChatMessages]) {
+    for (const message of messages) {
+      if (message.did !== identity.did) {
+        continue;
+      }
 
-    const user = userLabelForIdentity(identity, identity.did);
-    if (
-      message.user !== user ||
-      message.handle !== identity.handle ||
-      message.avatarUrl !== identity.avatarUrl
-    ) {
-      message.user = user;
-      message.handle = identity.handle;
-      message.avatarUrl = identity.avatarUrl;
-      changed = true;
+      const user = userLabelForIdentity(identity, identity.did);
+      if (
+        message.user !== user ||
+        message.handle !== identity.handle ||
+        message.avatarUrl !== identity.avatarUrl
+      ) {
+        message.user = user;
+        message.handle = identity.handle;
+        message.avatarUrl = identity.avatarUrl;
+        changed = true;
+      }
     }
   }
 

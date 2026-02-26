@@ -165,6 +165,7 @@
         background: var(--bg-chat);
         box-shadow: 0 10px 24px var(--panel-shadow);
         z-index: 2;
+        overflow: hidden;
         transition: background-color 280ms ease, border-color 280ms ease, box-shadow 280ms ease;
       }
 
@@ -293,36 +294,25 @@
         transition: background-color 280ms ease, border-color 280ms ease, box-shadow 280ms ease;
       }
 
-      .spam-toast-rail {
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: calc(100% - 2px);
-        height: clamp(64px, 7.4vw, 110px);
-        overflow: hidden;
-        pointer-events: none;
-        z-index: 4;
-      }
-
       .spam-toast {
         position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        transform: translateY(110%) scale(0.98);
+        left: 10px;
+        right: 10px;
+        top: 8px;
+        transform: translateY(-140%) scale(0.96);
         opacity: 0;
         pointer-events: none;
-        width: 100%;
+        width: auto;
         text-align: center;
         padding: 14px 20px;
-        border-radius: var(--frame-radius);
+        border-radius: 14px;
         border: 3px solid transparent;
-        font-size: clamp(22px, 3.2vw, 42px);
+        font-size: clamp(18px, 2.6vw, 34px);
         font-weight: 900;
         letter-spacing: 0.04em;
         text-transform: uppercase;
         z-index: 4;
-        transition: transform 320ms cubic-bezier(0.2, 0.9, 0.2, 1), opacity 220ms ease;
+        transition: transform 700ms cubic-bezier(0.2, 0.9, 0.15, 1), opacity 220ms ease;
       }
 
       .spam-toast.show {
@@ -487,6 +477,7 @@
 
       <section class="chat-panel">
         <ul id="chat-list" class="chat-list"></ul>
+        <div id="spam-toast" class="spam-toast" aria-live="polite"></div>
       </section>
 
       <section class="queue-panel">
@@ -494,9 +485,6 @@
         <div class="queue-footer">
           <div id="status" class="status">Connecting...</div>
           <div id="spam-ability" class="ability-badge">Spam: Unknown</div>
-        </div>
-        <div class="spam-toast-rail">
-          <div id="spam-toast" class="spam-toast" aria-live="polite"></div>
         </div>
       </section>
     </div>
@@ -515,6 +503,7 @@
       const chatNodes = new Map();
       const queueNodes = new Map();
       let lastSpamEnabled = null;
+      let lastTestMessageId = "";
       let spamToastTimer = null;
       const BALL_SPRITES = [
         "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png",
@@ -545,7 +534,7 @@
           return;
         }
 
-        spamToastEl.textContent = enabled ? "SPAM COMMANDS" : "SPAM DISABLED";
+        spamToastEl.textContent = enabled ? "SPAM COMMANDS ENABLED" : "SPAM COMMANDS DISABLED";
         spamToastEl.classList.toggle("enabled", enabled);
         spamToastEl.classList.toggle("disabled", !enabled);
         spamToastEl.classList.remove("show");
@@ -927,7 +916,7 @@
           const enabled = Boolean(state.spamAbility.enabled);
           spamAbilityEl.classList.toggle("enabled", enabled);
           spamAbilityEl.classList.toggle("disabled", !enabled);
-          spamAbilityEl.textContent = `Spam: ${enabled ? "ENABLED" : "DISABLED"} (${state.spamAbility.uniqueChatters}/${state.spamAbility.threshold} chatters, ${state.spamAbility.windowMinutes}m)`;
+          spamAbilityEl.textContent = `Spam: ${enabled ? "ENABLED" : "DISABLED"} (${state.spamAbility.uniqueChatters}/${state.spamAbility.threshold} chatters)`;
 
           if (lastSpamEnabled === null) {
             lastSpamEnabled = enabled;
@@ -936,7 +925,16 @@
             lastSpamEnabled = enabled;
           }
         }
-
+        const newestMessage = state.chat.at(-1);
+        if (
+          newestMessage &&
+          newestMessage.id !== lastTestMessageId &&
+          typeof newestMessage.text === "string" &&
+          newestMessage.text.trim().toLowerCase() === "!test"
+        ) {
+          lastTestMessageId = newestMessage.id;
+          showSpamToast(Boolean(state.spamAbility?.enabled));
+        }
       }
 
       const events = new EventSource("/events");
